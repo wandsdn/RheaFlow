@@ -1,0 +1,106 @@
+#!/usr/bin/env python
+#-*- coding:utf-8 -*-
+#
+# Copyright (C) 2016 Oladimeji Fayomi, University of Waikato.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# Name: RheaManager.py
+# Author: Dimeji Fayomi
+# Created: 26 August 2016
+# Last Modified:
+# Version: 1.0
+# Description: Launch script for the RheaFlow application.
+
+import sys
+import subprocess
+import atexit
+import os
+import signal
+import argparse
+import logging
+
+
+os.environ['RHEA_DIR'] = '/usr/local/lib/python2.7/dist-packages/rheaflow'
+RHEA_RUN_FILE = '/var/run/rheaflow'
+
+parser = argparse.ArgumentParser(
+         description='Launches and stops RheaFlow applications')
+group = parser.add_mutually_exclusive_group()
+group.add_argument('--start', action='store_true', default=False,
+                   help='Starts RheaFlow')
+group.add_argument('--stop', action='store_true', default=False,
+                   help='Stops RheaFlow')
+parser.add_argument('-d', '--debug', action='store_true', default=False,
+                    help='Starts RheaFlow in debug mode')
+parser.add_argument('-f', '--folder', nargs=1,
+                    help='Launch RheaFlow from another directory')
+
+
+def main():
+
+    if (args.start is True) and (args.debug is True):
+        ''' Start RheaFlow in debug mode. '''
+        pass
+
+    if (args.start is True) and (args.debug is False):
+        ''' Start RheaFlow normally. '''
+        NetlinkApp = os.path.expandvars('$RHEA_DIR/NetlinkProcessor.py')
+        ControllerApp = os.path.expandvars('$RHEA_DIR/RheaController.py')
+        if os.path.exists(NetlinkApp) is True:
+            try:
+                NetlinkProc = subprocess.Popen('python $RHEA_DIR/NetlinkProcessor.py',
+                                               preexec_fn=os.setsid,
+                                               shell=True)
+            except subprocess.CalledProcessError:
+                raise Exception()
+                sys.exit(1)
+
+        if os.path.exists(ControllerApp) is True:
+            try:
+                ControllerProc = subprocess.Popen('ryu-manager $RHEA_DIR/RheaController.py --log-file /var/log/rheaflow',
+                                                  preexec_fn=os.setsid,
+                                                  shell=True)
+            except subprocess.CalledProcessError:
+                raise Exception()
+                sys.exit(1)
+
+        if os.path.exists(RHEA_RUN_FILE):
+            with open(RHEA_RUN_FILE, 'w') as f:
+                f.write(str(NetlinkProc.pid))
+                f.write('\n')
+                f.write(str(ControllerProc.pid))
+        else:
+            with open(RHEA_RUN_FILE, 'w') as f:
+                f.write(str(NetlinkProc.pid))
+                f.write('\n')
+                f.write(str(ControllerProc.pid))
+
+    if args.stop is True:
+        try:
+            with open(RHEA_RUN_FILE, 'r') as f:
+                NetlinkPID = int(f.readline())
+                ControllerPID = int(f.readline())
+        except IOError:
+            print "%s not found" % RHEA_RUN_FILE
+            sys.exit(1)
+        os.remove(RHEA_RUN_FILE)
+        os.killpg(os.getpgid(ControllerPID), signal.SIGTERM)
+        os.killpg(os.getpgid(NetlinkPID), signal.SIGTERM)
+
+
+if __name__ == '__main__':
+    args = parser.parse_args()
+    if args.folder is not None:
+        os.environ['RHEA_DIR'] = args.folder[0]
+    main()

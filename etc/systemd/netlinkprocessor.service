@@ -1,0 +1,11 @@
+[Unit]
+Description=Start netlinkprocessor for RheaFlow
+
+[Service]
+Type=idle
+WorkingDirectory=/usr/local/lib/python2.7/dist-packages/rheaflow/
+PIDFile=/var/run/rheaflow/pid/netlinkprocessor.pid
+ExecStart=/usr/bin/python NetlinkProcessor.py
+
+[Install]
+WantedBy=multi-user.target

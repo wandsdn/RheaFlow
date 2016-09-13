@@ -1,0 +1,51 @@
+---
+datapaths:
+   - name: switch1
+     type: HP
+     dp_id: 0000000000000099
+     vs_port_prefix: switch1-p
+     ports: { 1: ['172.16.1.1/24', '2001:0db8:0:f101::1/64'], 
+              2: ['172.16.2.1/24', '2001:0db8:0:f102::1/64'], 
+              4: ['172.16.4.1/24', '2001:0db8:0:f104::1/64'],
+              5: ['172.16.5.1/24', '2001:0db8:0:f105::1/64'] }
+     fastpath_port: 3
+     fastpath_vs: 1002
+     isl_port:
+     isl_rem_port:
+     isl_rem_dp_id:
+     rem_port: [1,2,4,5]
+
+
+   - name: uow-reannz-sw2
+     type: Brocade
+     dp_id: 0000000000000089
+     vs_port_prefix: urs2-p
+     ports: {1: [],
+             2: [],
+             4: [],
+             5: [] }
+     fastpath_port: 3
+     fastpath_vs: 1002
+     isl_port:
+     isl_rem_port:
+     isl_rem_dp_id:
+
+   - name: ruakura-reannz-sw1
+     type: Pica
+     dp_id: 0000000000000088
+     vs_port_prefix: rrs1-p
+     ports: {1: [],2: [],3: [],4: [],5: [],6: [],7: [],8: [],9: [] }
+     fastpath_port: 3
+     fastpath_vs: 1002
+     isl_port:
+     isl_rem_port:
+     isl_rem_dp_id:
+
+# Settings/Configuration for
+# the virtual switch dp0
+# change fastpath interface to eth2
+# on prod
+Virtual-switch: {
+  fastpath_interface: vs-fastpath,
+  fastpath_port: 1002
+}
