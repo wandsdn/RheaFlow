@@ -153,28 +153,64 @@ class RheaFlowProcessor(object):
 
         return 'fe80::{:04x}:{:02x}ff:fe{:02x}:{:04x}'.format(prefix2, prefix1,
                                                               suffix1, suffix2)
-    
-    def isl_flows(self, datapath, label, port_no, dp_isl_port):
-        isl_priority = 37000
+
+    def ingress_isl_flows(self, datapath, label, port_no, interswitch_links):
+        isl_priority = 36000
+        ofp = datapath.ofproto
+        ofp_parser = datapath.ofproto_parser
+        cookie = cookie_mask = 0
+        table_id = 0
+        msgs = []
+        buffer_id = ofp.OFP_NO_BUFFER
+        for dp_isl_port in interswitch_links:
+            match = ofp_parser.OFPMatch(in_port=dp_isl_port,
+                                        vlan_vid=(label | ofproto.OFPVID_PRESENT))
+            actions = self.labeller.pop_action_meta(ofp_parser, None)
+            actions += [ofp_parser.OFPActionOutput(port=port_no)]
+            inst = [ofp_parser.OFPInstructionActions(ofp.OFPIT_APPLY_ACTIONS,
+                                                     actions)]
+            msgs.append(ofp_parser.OFPFlowMod(datapath, cookie, cookie_mask,
+                                              table_id, ofp.OFPFC_ADD,
+                                              idle_timeout, hard_timeout,
+                                              isl_priority, buffer_id,
+                                              ofp.OFPP_ANY, ofp.OFPG_ANY,
+                                              ofp.OFPFF_SEND_FLOW_REM,
+                                              match, inst))
+        self.send_msgs(datapath, msgs)
+
+    def egress_isl_flows(self, datapath, label, ingress_port, egress_port):
+        isl_priority = 36000
         ofp = datapath.ofproto
         ofp_parser = datapath.ofproto_parser
         cookie = cookie_mask = 0
         table_id = 0
         buffer_id = ofp.OFP_NO_BUFFER
-        match = ofp_parser.OFPMatch(in_port=dp_isl_port,
+        msgs = []
+        match = ofp_parser.OFPMatch(in_port=ingress_port,
                                     vlan_vid=(label | ofproto.OFPVID_PRESENT))
-        actions = self.labeller.pop_action_meta(ofp_parser, None)
-        actions += [ofp_parser.OFPActionOutput(port=port_no)]
+        actions = [ofp_parser.OFPActionOutput(port=egress_port)]
         inst = [ofp_parser.OFPInstructionActions(ofp.OFPIT_APPLY_ACTIONS,
                                                  actions)]
-        msg = ofp_parser.OFPFlowMod(datapath, cookie, cookie_mask,
-                                    table_id, ofp.OFPFC_ADD,
-                                    idle_timeout, hard_timeout,
-                                    isl_priority, buffer_id,
-                                    ofp.OFPP_ANY, ofp.OFPG_ANY,
-                                    ofp.OFPFF_SEND_FLOW_REM,
-                                    match, inst)
-        datapath.send_msg(msg)
+        msgs.append(ofp_parser.OFPFlowMod(datapath, cookie, cookie_mask,
+                                          table_id, ofp.OFPFC_ADD,
+                                          idle_timeout, hard_timeout,
+                                          isl_priority, buffer_id,
+                                          ofp.OFPP_ANY, ofp.OFPG_ANY,
+                                          ofp.OFPFF_SEND_FLOW_REM,
+                                          match, inst))
+        match = ofp_parser.OFPMatch(in_port=egress_port,
+                                    vlan_vid=(label | ofproto.OFPVID_PRESENT))
+        actions = [ofp_parser.OFPActionOutput(port=ingress_port)]
+        inst = [ofp_parser.OFPInstructionActions(ofp.OFPIT_APPLY_ACTIONS,
+                                                 actions)]
+        msgs.append(ofp_parser.OFPFlowMod(datapath, cookie, cookie_mask,
+                                          table_id, ofp.OFPFC_ADD,
+                                          idle_timeout, hard_timeout,
+                                          isl_priority, buffer_id,
+                                          ofp.OFPP_ANY, ofp.OFPG_ANY,
+                                          ofp.OFPFF_SEND_FLOW_REM,
+                                          match, inst))
+        self.send_msgs(datapath, msgs)
 
     def fastpath_flows(self, datapath, label, port_no, dp_fs_port,
                        vs_port_hw_addr):
@@ -1025,9 +1061,9 @@ class RheaFlowProcessor(object):
                                     self.send_msgs(dp, msgs)
                                 else:
                                     ''' Check for ISL. '''
-                                    (isl_label, rem_dpid, dp_isl_port, rem_isl_port) = (
+                                    (isl_label, interswitch_links) = (
                                      map_table.dp_port_to_isl_labels(dp_id, dp_port))
-                                    if (isl_label is not None) and (dp_isl_port is not None):
+                                    if (isl_label is not None):
                                         for port in dp.ports:
                                             port_no = dp.ports[port].port_no
                                             port_mac = dp.ports[port].hw_addr
@@ -1055,21 +1091,25 @@ class RheaFlowProcessor(object):
                                                 actions = self.labeller.push_action_meta(isl_label,
                                                                                          ofp_parser,
                                                                                          actions)
-                                                if rem_dpid == dpid_to_str(dpid):
-                                                    actions += [ofp_parser.OFPActionOutput(port=rem_isl_port)]
-                                                    inst = [ofp_parser.OFPInstructionActions(ofp.OFPIT_APPLY_ACTIONS, actions)]
-                                                    msgs.append(ofp_parser.OFPFlowMod(dp, cookie,
-                                                                                      cookie_mask,
-                                                                                      table_id,
-                                                                                      ofp.OFPFC_ADD,
-                                                                                      idle_timeout,
-                                                                                      hard_timeout,
-                                                                                      priority,
-                                                                                      buffer_id,
-                                                                                      ofp.OFPP_ANY,
-                                                                                      ofp.OFPG_ANY,
-                                                                                      ofp.OFPFF_SEND_FLOW_REM,
-                                                                                      match, inst))
+                                                for dp_isl_port, remote_dp in interswitch_links.items():
+                                                    rem_dpid = remote_dp.keys()[0]
+                                                    rem_isl_port = remote_dp[rem_dpid]
+
+                                                    if rem_dpid == dpid_to_str(dpid):
+                                                        actions += [ofp_parser.OFPActionOutput(port=rem_isl_port)]
+                                                        inst = [ofp_parser.OFPInstructionActions(ofp.OFPIT_APPLY_ACTIONS, actions)]
+                                                        msgs.append(ofp_parser.OFPFlowMod(dp, cookie,
+                                                                                          cookie_mask,
+                                                                                          table_id,
+                                                                                          ofp.OFPFC_ADD,
+                                                                                          idle_timeout,
+                                                                                          hard_timeout,
+                                                                                          priority,
+                                                                                          buffer_id,
+                                                                                          ofp.OFPP_ANY,
+                                                                                          ofp.OFPG_ANY,
+                                                                                          ofp.OFPFF_SEND_FLOW_REM,
+                                                                                          match, inst))
                                         self.send_msgs(dp, msgs)
 
     def convert_route_to_flow(self, route, map_table, iftable, neigh_table,
@@ -1208,26 +1248,30 @@ class RheaFlowProcessor(object):
                                             actions = [ofp_parser.OFPActionSetField(eth_src=vs_int_mac),
                                                        ofp_parser.OFPActionSetField(eth_dst=nh_mac)]
                                         actions = self.decrement_ip_ttl(ofp_parser, actions, decrement_ttl)
-                                        (isl_label, rem_dpid, dp_isl_port, rem_isl_port) = (
+                                        (isl_label, interswitch_links) = (
                                          map_table.dp_port_to_isl_labels(dp_id, dp_port))
 
                                         (fp_label, rem_vs_port, dp_fs_port, vs_fs_port) = (
                                          map_table.dp_port_to_fp_labels(dpid_to_str(dpid), port_no))
 
-                                        if (isl_label is not None) and (dp_isl_port is not None):
+                                        if (isl_label is not None):
                                             push_actions = self.labeller.push_action_meta(isl_label,
                                                                                           ofp_parser,
                                                                                           actions)
-                                            push_actions += [ofp_parser.OFPActionOutput(port=dp_isl_port)]
-                                            inst = [ofp_parser.OFPInstructionActions(ofp.OFPIT_APPLY_ACTIONS,
-                                                                                     push_actions)]
-                                            msgs.append(ofp_parser.OFPFlowMod(dp, cookie, cookie_mask,
-                                                                              table_id, ofp.OFPFC_ADD,
-                                                                              idle_timeout, hard_timeout,
-                                                                              priority, buffer_id,
-                                                                              ofp.OFPP_ANY, ofp.OFPG_ANY,
-                                                                              ofp.OFPFF_SEND_FLOW_REM,
-                                                                              match, inst))
+                                            for dp_isl_port, remote_dp in interswitch_links.items():
+                                                rem_dpid = remote_dp.keys()[0]
+                                                rem_isl_port = remote_dp[rem_dpid]
+                                                if rem_dpid == dpid_to_str(dpid):
+                                                    push_actions += [ofp_parser.OFPActionOutput(port=rem_isl_port)]
+                                                    inst = [ofp_parser.OFPInstructionActions(ofp.OFPIT_APPLY_ACTIONS,
+                                                                                             push_actions)]
+                                                    msgs.append(ofp_parser.OFPFlowMod(dp, cookie, cookie_mask,
+                                                                                      table_id, ofp.OFPFC_ADD,
+                                                                                      idle_timeout, hard_timeout,
+                                                                                      priority, buffer_id,
+                                                                                      ofp.OFPP_ANY, ofp.OFPG_ANY,
+                                                                                      ofp.OFPFF_SEND_FLOW_REM,
+                                                                                      match, inst))
 
                                         elif (fp_label is not None) and (dp_fs_port is not None):
                                             push_actions = self.labeller.push_action_meta(fp_label,
@@ -1243,7 +1287,7 @@ class RheaFlowProcessor(object):
                                                                               ofp.OFPP_ANY, ofp.OFPG_ANY,
                                                                               ofp.OFPFF_SEND_FLOW_REM,
                                                                               match, inst))
-                                            ''' 
+                                            '''
                                                 Install a rule on the virtual switch dp0 that pops the VLAN from packets
                                                 sent over the fastpath link and output them to the virtual interface port
                                                 which is the destination.
@@ -1253,7 +1297,6 @@ class RheaFlowProcessor(object):
                                             vs_dp = vswitch.dp
                                             vs_ofp = vs_dp.ofproto
                                             vs_ofp_parser = vs_dp.ofproto_parser
-                        
                                             vs_match = vs_ofp_parser.OFPMatch(in_port=vs_fs_port,
                                                                               vlan_vid=(fp_label | ofproto.OFPVID_PRESENT),
                                                                               eth_src=vs_int_mac,
@@ -1570,7 +1613,7 @@ class RheaFlowProcessor(object):
             self.HostonDP[(ip_addr, mac)] = (dp_port, dp_id)
 
     def DPHostWithIP(self, ip_addr):
-        ''' 
+        '''
             Find a hosts in the neighbour table using IP address.
         '''
         addrnet = IPNetwork(ip_addr)
@@ -1634,7 +1677,7 @@ class RheaFlowProcessor(object):
             pkt_ipv4 = pkt.get_protocol(ipv4)
             pkt_ipv6 = pkt.get_protocol(ipv6)
             in_port = _msg.match['in_port']
- 
+
             if in_port == ofp.OFPP_LOCAL:
                 log.warn("%s received from dp0's OpenFlow LOCAL port", pkt)
                 log.warn("The received packet will be discarded")

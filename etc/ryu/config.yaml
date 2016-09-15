@@ -10,36 +10,30 @@ datapaths:
               5: ['172.16.5.1/24', '2001:0db8:0:f105::1/64'] }
      fastpath_port: 3
      fastpath_vs: 1002
-     isl_port:
-     isl_rem_port:
-     isl_rem_dp_id:
-     rem_port: [1,2,4,5]
+     interswitch_links: { 6: {0000000000000089: 6}, 
+                          7: {0000000000000088: 7}}
 
 
-   - name: uow-reannz-sw2
+   - name: uow-switch1
      type: Brocade
      dp_id: 0000000000000089
-     vs_port_prefix: urs2-p
+     vs_port_prefix: us2-p
      ports: {1: [],
              2: [],
              4: [],
              5: [] }
-     fastpath_port: 3
-     fastpath_vs: 1002
-     isl_port:
-     isl_rem_port:
-     isl_rem_dp_id:
+     interswitch_links: { 6: {0000000000000099: 6},
+                          8: {0000000000000088: 8}}
+    
 
-   - name: ruakura-reannz-sw1
+   - name: wand-ruakura-switch2
      type: Pica
      dp_id: 0000000000000088
-     vs_port_prefix: rrs1-p
-     ports: {1: [],2: [],3: [],4: [],5: [],6: [],7: [],8: [],9: [] }
-     fastpath_port: 3
-     fastpath_vs: 1002
-     isl_port:
-     isl_rem_port:
-     isl_rem_dp_id:
+     vs_port_prefix: wrs1-p
+     ports: {1: [],2: [],3: [],4: [],5: [],6: [],9: [] }
+     interswitch_links: { 7: {0000000000000099: 7},
+                          8: {0000000000000089: 8}}
+     
 
 # Settings/Configuration for
 # the virtual switch dp0

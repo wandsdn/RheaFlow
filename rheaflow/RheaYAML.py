@@ -143,94 +143,32 @@ class RheaYAML(object):
             in the config.
         '''
         fastpath_entries = []
-        log.warn("self.configs is %s", self.configs)
         for identifier, values in self.configs.items():
             if identifier == 'datapaths':
                 for dp in values:
                     try:
                         dpid = dp['dp_id']
                     except KeyError:
-                        log.error("No datapath ID included for a switch in the\
-                                  config")
-                        raise KeyError
+                        log.error("No datapath ID included for a switch in the config")
                     try:
                         fp_on_dp = dp['fastpath_port']
                         fp_on_vs = dp['fastpath_vs']
                         if (fp_on_dp is not None) and (fp_on_vs is not None):
                             fastpath_entries.append((dpid, fp_on_dp, fp_on_vs))
                     except KeyError:
-                        log.warn("No fastpath entries included in config for\
-                                 (dpid=%s)", dpid)
+                        log.warn("No fastpath entries included in config for (dpid=%s)", dpid)
 
         return fastpath_entries
 
-    def fetch_isl_entries(self):
-        ''' Return a list containing a tuple of interswitch link entries
-            in the config.
+    def fetch_interswitch_links(self, switch):
         '''
-        isl_entries = []
-        for identifier, values in self.configs.items():
-            if identifier == 'datapaths':
-                for dp in values:
-                    try:
-                        dpid = dp['dp_id']
-                    except KeyError:
-                        log.error("No datapath ID included for a switch in the\
-                                  config")
-                        raise KeyError
-                    try:
-                        isl_port = dp['isl_port']
-                        rem_isl_port = dp['isl_rem_port']
-                        rem_isl_dpid = dp['isl_rem_dp_id']
-                        if ((isl_port is not None) and
-                                (rem_isl_port is not None) and
-                                (rem_isl_dpid is not None)):
-                            isl_entries.append((dpid, isl_port, rem_isl_port,
-                                                rem_isl_dpid))
-                    except KeyError:
-                        log.warn("No ISL entries included in config for\
-                                 (dpid=%s)", dpid)
-        return isl_entries
-
-    def fetch_isl_port(self, configs, dpid):
-        '''
-            Return the inter-switch link port, if included for the
-            datapath.
-        '''
-        for identifier, values in configs.items():
-            if identifier == 'datapaths':
-                for dp in values:
-                    try:
-                        dpid_in_config = dp['dp_id']
-                        if dpid_in_config == dpid:
-                            if 'isl_port' in dp:
-                                isl_port = dp['isl_port']
-                                return isl_port
-                    except KeyError:
-                        log.error("DPID not found for datapath in the config")
-        return None
-
-    def fetch_isl_rem(self, switch):
-        '''
-            Return the port and dpid of remote datapath for the inter-switch
-            link connected to the supplied datapath id.
+            Return inter switch link configurations for a datapath
         '''
         try:
-            rem_isl_port = switch['isl_rem_port']
+            interswitch_links = switch['interswitch_links']
         except KeyError:
-            rem_isl_port = None
-        try:
-            rem_isl_dpid = switch['isl_rem_dp_id']
-        except KeyError:
-            rem_isl_dpid = None
-        return (rem_isl_port, rem_isl_dpid)
-
-    def fetch_rem_ports(self, switch):
-        try:
-            rem_ports = switch['rem_port']
-        except KeyError:
-            rem_ports = None
-        return rem_ports
+            interswitch_links = None
+        return interswitch_links
 
     def get_vs_port_prefix(self, configs, dpid):
         for identifier, values in configs.items():
@@ -275,6 +213,7 @@ if __name__ == "__main__":
     switch1 = configclass.get_dp_entry(configclass.configs, my_id)
     fp_entries = configclass.fetch_fastpath_entries()
     dp_ports = configclass.fetch_OFPorts(switch1)
+    interswitch_links = configclass.fetch_interswitch_links(switch1)
     log.warn("Switch  1 :%s", switch1)
     log.warn("Our FP entries : %s", fp_entries)
     log.warn("Ports on switch1 : %s", dp_ports)

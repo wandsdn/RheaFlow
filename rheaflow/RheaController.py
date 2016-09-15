@@ -70,6 +70,7 @@ class Table:
         self.fastpaths = {}
         self.isl = {}
         self.dp_dec_ttl = {}
+        self.fastpath_switch = {}
 
     def update_dp_port(self, dp_id, dp_port, dp_port_name, dp_port_hw_addr,
                        vs_port_name, vs_port, vs_port_hw_addr):
@@ -95,6 +96,12 @@ class Table:
             del self.dp_dec_ttl[dp_id]
         self.dp_dec_ttl[dp_id] = decrement_ttl
 
+    def set_fastpath_switch(self, dp_id, dp_fastpath_port, vs_fastpath_port):
+        if dp_id in self.fastpath_switch:
+            del self.fastpath_switch[dp_id]
+
+        self.fastpath_switch[dp_id] = (dp_fastpath_port, vs_fastpath_port)
+
     def update_fastpath(self, dp_id, dp_port, fastpath_label, vs_port,
                         dp_fastpath_port, vs_fastpath_port):
         if (dp_id, dp_port) in self.fastpaths:
@@ -105,13 +112,143 @@ class Table:
                                             vs_fastpath_port)
         log.info("fastpath table: %s", self.fastpaths)
 
-    def update_isl(self, dp_id, dp_port, isl_label, rem_dpid,
-                   dp_isl_port, rem_isl_port):
+    def find_isl(self, dp_id):
+        all_isl = []
+        for (id_, port) in self.isl.keys():
+            if id_ == dp_id:
+                label, islinks = self.isl[(id_, port)]
+                for isl_port, remote in islinks.items():
+                    log.info("remote in find_isl: %s", remote)
+                    if remote not in all_isl:
+                        all_isl.append(remote)
+
+        return all_isl
+
+    def opposite_link(self, dp_id, port):
+        for (id_, port) in self.isl.keys():
+            if id_ == dp_id:
+                label, islinks = self.isl[(id_, port)]
+                for isl_port, remote in islinks.items():
+                    log.info("remote in opposite_link: %s", remote)
+                    if isl_port == port:
+                        return remote
+        return None
+
+    def find_path(self, dp_id1, dp_id2):
+        dp_id1h = str_to_dpid(dp_id1)
+        dp_id2h = str_to_dpid(dp_id2)
+        if self.fastpath_switch:
+            fastpath_dpid = self.fastpath_switch.keys()[0]
+            dp_fastpath_port, vs_fastpath_port = self.fastpath_switch[fastpath_dpid]
+        else:
+            fastpath_dpid = None
+
+        if dp_id1 == fastpath_dpid:
+            if is_rfvs(dp_id2h):
+                path = [(dp_id1, dp_fastpath_port, dp_id2, vs_fastpath_port)]
+                return path
+            else:
+                for (id_, port) in self.isl.keys():
+                    if id_ == dp_id1:
+                        label, islinks = self.isl[(id_, port)]
+                        for isl_port in islinks:
+                            remote_switch = islinks[isl_port]
+                            remote_dpid = remote_switch.keys()[0]
+                            remote_dpid_port = remote_switch[remote_dpid]
+                            if dp_id2 in remote_switch:
+                                dpid2_port = remote_switch[dp_id2]
+                                path = [(dp_id1, isl_port, dp_id2, dpid2_port)]
+                                return path
+                            else:
+                                recursive_path = self.find_path(remote_dpid, dp_id2)
+                                path = [(dp_id1, isl_port, remote_dpid, remote_dpid_port)]
+                                if recursive_path is None:
+                                    return None
+
+                                path.extend(recursive_path)
+                                return path
+
+        if dp_id2 == fastpath_dpid:
+            if is_rfvs(dp_id1h):
+                path = [(dp_id1, vs_fastpath_port, dp_id2, vs_fastpath_port)]
+                return path
+            else:
+                for (id_, port) in self.isl.keys():
+                    if id_ == dp_id2:
+                        label, islinks = self.isl[(id_, port)]
+                        for isl_port in islinks:
+                            remote_switch = islinks[isl_port]
+                            remote_dpid = remote_switch.keys()[0]
+                            remote_dpid_port = remote_switch[remote_dpid]
+                            if dp_id1 in remote_switch:
+                                dpid1_port = remote_switch[dp_id1]
+                                path = [(dp_id1, dpid1_port, dp_id2, isl_port)]
+                                return path
+                            else:
+                                recursive_path = self.find_path(dp_id1, remote_dpid)
+                                if recursive_path is None:
+                                    return None
+
+                                path = [(remote_dpid, remote_dpid_port, dp_id2, isl_port)]
+                                recursive_path.extend(path)
+                                return recursive_path
+
+        if (dp_id1 is not fastpath_dpid) and (dp_id2 is not fastpath_dpid):
+            for (id_, port) in self.isl.keys():
+                if id_ == dp_id1:
+                    label, islinks = self.isl[(id_, port)]
+                    for isl_port in islinks:
+                        remote_switch = islinks[isl_port]
+                        remote_dpid = remote_switch.keys()[0]
+                        remote_dpid_port = remote_switch[remote_dpid]
+                        if dp_id2 in remote_switch:
+                            dpid2_port = remote_switch[dp_id2]
+                            path = [(dp_id1, isl_port, dp_id2, dpid2_port)]
+                            return path
+                        else:
+                            other_isls = self.find_isl(remote_dpid)
+                            for other_isl in other_isls:
+                                if dp_id2 in other_isl:
+                                    dpid2_port = other_isl[dp_id2]
+                                    opposite = self.opposite_link(dp_id2, dpid2_port)
+                                    if opposite is not None:
+                                        opposite_rem = opposite.keys()[0]
+                                        if opposite_rem == remote_dpid:
+                                            opposite_dpid_port = opposite[opposite_rem]
+                                            path = [(dp_id1, isl_port, remote_dpid, remote_dpid_port),
+                                                    (remote_dpid, opposite_dpid_port, dp_id2, dpid2_port)]
+                                            return path
+                if id_ == dp_id2:
+                    label, islinks = self.isl[(id_, port)]
+                    for isl_port in islinks:
+                        remote_switch = islinks[isl_port]
+                        remote_dpid = remote_switch.keys()[0]
+                        remote_dpid_port = remote_switch[remote_dpid]
+                        if dp_id1 in remote_switch:
+                            dpid1_port = remote_switch[dp_id1]
+                            path = [(dp_id1, dpid1_port, dp_id2, isl_port)]
+                            return path
+                        else:
+                            other_isls = self.find_isl(remote_dpid)
+                            for other_isl in other_isls:
+                                if dp_id1 in other_isl:
+                                    dpid1_port = other_isl[dp_id1]
+                                    opposite = self.opposite_link(dp_id1, dpid1_port)
+                                    if opposite is not None:
+                                        opposite_rem = opposite.keys()[0]
+                                        if opposite_rem == remote_dpid:
+                                            opposite_dpid_port = opposite[opposite_rem]
+                                            path = [(dp_id1, dpid1_port, remote_dpid, opposite_dpid_port),
+                                                    (remote_dpid, remote_dpid_port, dp_id2, isl_port)]
+                                            return path
+
+            return None
+
+    def update_isl(self, dp_id, dp_port, isl_label, interswitch_links):
         if (dp_id, dp_port) in self.isl:
             del self.isl[(dp_id, dp_port)]
 
-        self.isl[(dp_id, dp_port)] = (isl_label, rem_dpid,
-                                      dp_isl_port, rem_isl_port)
+        self.isl[(dp_id, dp_port)] = (isl_label, interswitch_links)
 
         log.info("ISL table: %s", self.isl)
 
@@ -125,7 +262,7 @@ class Table:
         try:
             return self.isl[(dp_id, dp_port)]
         except KeyError:
-            return None, None, None, None
+            return None, None
 
     def fpentry_from_fplabel(self, fastpath_label):
         for dp_dets, fp_dets in self.fastpaths.items():
@@ -138,7 +275,7 @@ class Table:
 
     def islentry_from_isllabel(self, isl_label):
         for dp_dets, isl_dets in self.isl.items():
-            label, rem_dpid, dp_isl_port, rem_isl_port = isl_dets
+            label, interswitch_links = isl_dets
             if isl_label == label:
                 return dp_dets, isl_dets
         return None, None
@@ -151,16 +288,6 @@ class Table:
         dp_dets = (None, None)
         fp_dets = (None, None, None, None)
         return dp_dets, fp_dets
-
-    def islentry_from_rem_port(self, remote_dpid, remote_port):
-        for dp_dets, isl_dets in self.isl.items():
-            label, rem_port, rem_dpid, dp_isl_port, rem_isl_port = isl_dets
-            if (remote_dpid == rem_dpid) and (remote_port == rem_port):
-                return dp_dets, isl_dets
-
-        dp_dets = (None, None)
-        isl_dets = (None, None, None, None, None)
-        return None, None
 
     def dp_port_to_vs_port(self, dp_id, dp_port, dp_port_name,
                            dp_port_hw_addr):
@@ -215,9 +342,10 @@ class Table:
         if dp_id in self.dp_dec_ttl:
             del self.dp_dec_ttl[dp_id]
 
+        if dp_id in self.fastpath_switch:
+            del self.fastpath_switch[dp_id]
 
 
-# This class manages port creation and removal on the virtual switch
 class VSInterfaceManager(object):
     ''' VSInterfaceManager class handles the configuration of the virtual
         switch, the creation and removal of ports on the virtual switch
@@ -387,12 +515,131 @@ class RheaController(app_manager.RyuApp):
         self.vsif_to_ofp = {}
         self.netlink = kwargs['netlink']
         self.flowprocessor = RheaFlowProcessor(self.switches)
-        all_fp_entries = self.yamlObj.fetch_fastpath_entries()
-        all_isl_entries = self.yamlObj.fetch_isl_entries()
+        self.all_fp_entries = self.yamlObj.fetch_fastpath_entries()
         log.info("RYU RheaController running.")
         self.threads.append(hub.spawn(self.retry_pendingroutes))
         self.dp_entries = []
+        self.isl_switches = []
+        self.fastpath_configured = False
 
+    def configure_datapath(self, dp, dp_id, vs_port_prefix, dp_entry):
+        ofports_in_dp_entry = dp_entry['ports']
+        dp_fastpath_port = self.yamlObj.fetch_fpport(dp_entry)
+        vs_fastpath_port = self.yamlObj.fetch_vsfpport(dp_entry)
+        interswitch_links = self.yamlObj.fetch_interswitch_links(dp_entry)
+
+        if ((dp_fastpath_port is not None) and
+                (vs_fastpath_port is not None)):
+            self.table.set_fastpath_switch(dpid_to_str(dp_id),
+                                           dp_fastpath_port,
+                                           vs_fastpath_port)
+            self.fastpath_configured = True
+
+        if (interswitch_links is not None):
+            if not self.table.fastpath_switch:
+                self.isl_switches.append([dp_entry, dp_id, vs_port_prefix])
+                return
+
+        if len(ofports_in_dp_entry) != 0:
+            for ofp_no, addresses in ofports_in_dp_entry.items():
+                ofport = self.switches._get_port(dp_id, ofp_no)
+                if ofport is not None:
+                    port_name = ofport.name
+                    port_hw_addr = ofport.hw_addr
+                    vs_port_name, vs_port_no = self.VSManager.AddPort(vs_port_prefix, ofp_no)
+                    time.sleep(.10)
+                    self.VSManager.SetIPAddress(vs_port_name, addresses)
+                    vs_interface = self.netlink.find_interface_by_name(vs_port_name)
+
+                    if vs_interface:
+                        vs_port_hw_addr = vs_interface['mac-address']
+                        vs_ifindex = vs_interface['ifindex']
+                        self.vsif_to_ofp[vs_ifindex] = vs_port_no
+                    else:
+                        log.error("Virtual switch interface not found, Mapping not completed, %s not found in interface table",
+                                  vs_port_name)
+                        traceback.print_exc(file=sys.stdout)
+                        self.shutdown(1)
+                    log.info("Virtual switch Port %s with OpenFlow port number %s has a mac address of %s",
+                             vs_port_name, vs_port_no, vs_port_hw_addr)
+
+                    self.table.update_dp_port(dpid_to_str(dp_id),
+                                              ofp_no, port_name,
+                                              port_hw_addr,
+                                              vs_port_name,
+                                              vs_port_no,
+                                              vs_port_hw_addr)
+                    log.info("OpenFlow port %d on dp_id=%s added to dp0",
+                             ofp_no, dpid_to_str(dp_id))
+
+                    if ((dp_fastpath_port is not None) and
+                       (vs_fastpath_port is not None)):
+
+                        fp_label = self.labeller.allocate_label()
+                        self.table.update_fastpath(dpid_to_str(dp_id),
+                                                   ofp_no, fp_label,
+                                                   vs_port_no,
+                                                   dp_fastpath_port,
+                                                   vs_fastpath_port)
+
+                        self.flowprocessor.vs_fastpath_flows(fp_label,
+                                                             vs_fastpath_port,
+                                                             vs_port_no)
+
+                        self.flowprocessor.fastpath_flows(dp, fp_label,
+                                                          ofp_no,
+                                                          dp_fastpath_port,
+                                                          vs_port_hw_addr)
+                        log.info("FastPath is enabled, allocating label:%s for port %s on dpid:%s to port %s on the virtual switch using link (dpid:%s,port:%s)->(VS,port:%s)",
+                                 fp_label, ofp_no, dpid_to_str(dp_id),
+                                 vs_port_no, dpid_to_str(dp_id),
+                                 dp_fastpath_port, vs_fastpath_port)
+                    else:
+                        log.info("FastPath is not enabled for port %s on (dpid:%s)", ofp_no,
+                                 dpid_to_str(dp_id))
+
+                    if (interswitch_links is not None):
+                        isl_label = self.labeller.allocate_label()
+                        self.table.update_isl(dpid_to_str(dp_id),
+                                              ofp_no, isl_label,
+                                              interswitch_links)
+                        self.flowprocessor.ingress_isl_flows(dp, isl_label,
+                                                             ofp_no, interswitch_links)
+                        if self.table.fastpath_switch:
+                            fastpath_dpid = self.table.fastpath_switch.keys()[0]
+                            dp_fs_port, vs_fs_port = self.table.fastpath_switch[fastpath_dpid]
+                            if fastpath_dpid is not dpid_to_str(dp_id):
+                                for isl_port, remote_dp in interswitch_links.items():
+                                    remote_dpid = remote_dp.keys()[0]
+                                    remote_dpid_port = remote_dp[remote_dpid]
+                                    if remote_dpid == fastpath_dpid:
+                                        self.flowprocessor.vs_fastpath_flows(isl_label,
+                                                                             vs_fs_port,
+                                                                             vs_port_no)
+                                        fastpath_switch = self.switches._get_switch(str_to_dpid(fastpath_dpid))
+                                        fastpath_dp = fastpath_switch.dp
+                                        self.flowprocessor.egress_isl_flows(fastpath_dp,
+                                                                            isl_label,
+                                                                            remote_dpid_port,
+                                                                            dp_fs_port)
+                                        self.flowprocessor.fastpath_flows(dp, isl_label,
+                                                                          ofp_no,
+                                                                          isl_port,
+                                                                          vs_port_hw_addr)
+                        log.info("Inter-switch link is enabled, allocationg label:%s for port %s on dpid:%s.",
+                                 isl_label, ofp_no, dpid_to_str(dp_id))
+                    else:
+                        log.info("Inter-switch link is not enabled for port:%s on (dpid:%s)",
+                                 ofp_no, dpid_to_str(dp_id))
+                    if ((dp_fastpath_port is None) and
+                            (vs_fastpath_port is None) and
+                            (interswitch_links is None)):
+                        self.flowprocessor.create_initial_flow(dp,
+                                                               vs_port_hw_addr,
+                                                               ofp_no)
+                else:
+                    log.warn("There are no ports to be mapped for (dp_id=%s) in config",
+                             dpid_to_str(dp_id))
 
     @set_ev_cls(event.EventSwitchEnter, MAIN_DISPATCHER)
     def handler_datapath_enter(self, ev):
@@ -430,107 +677,18 @@ class RheaController(app_manager.RyuApp):
                     self.dp_entries.append([dp_entry, dp_id, vs_port_prefix])
                     return
 
-                if len(ofports_in_dp_entry) != 0:
-                    for ofp_no, addresses in ofports_in_dp_entry.items():
-
-                        ofport = self.switches._get_port(dp_id, ofp_no)
-                        if ofport is not None:
-                            port_name = ofport.name
-                            port_hw_addr = ofport.hw_addr
-                            vs_port_name, vs_port_no = (
-                                self.VSManager.AddPort(vs_port_prefix, ofp_no))
-                            time.sleep(.10)
-                            self.VSManager.SetIPAddress(vs_port_name,
-                                                        addresses)
-                            vs_interface = self.netlink.find_interface_by_name(vs_port_name)
-                            if vs_interface:
-                                vs_port_hw_addr = vs_interface['mac-address']
-                                vs_ifindex = vs_interface['ifindex']
-                                self.vsif_to_ofp[vs_ifindex] = vs_port_no
-                            else:
-                                log.error("Virtual switch interface not found, Mapping not completed, %s not found in interface table",
-                                          vs_port_name)
-                                traceback.print_exc(file=sys.stdout)
-                                self.shutdown(1)
-
-                            log.info("Virtual switch Port %s with OpenFlow port number %s has a mac address of %s",
-                                     vs_port_name, vs_port_no, vs_port_hw_addr)
-                            self.table.update_dp_port(dpid_to_str(dp_id),
-                                                      ofp_no, port_name,
-                                                      port_hw_addr,
-                                                      vs_port_name,
-                                                      vs_port_no,
-                                                      vs_port_hw_addr)
-                            log.info("OpenFlow port %d on dp_id=%s added to dp0",
-                                     ofp_no, dpid_to_str(dp_id))
-                            dp_fastpath_port = self.yamlObj.fetch_fpport(dp_entry)
-
-                            vs_fastpath_port = self.yamlObj.fetch_vsfpport(dp_entry)
-
-                            dp_isl_port = self.yamlObj.fetch_isl_port(dp_entry,
-                                                                      dpid_to_str(dp_id))
-
-                            rem_isl_port, rem_isl_dpid = self.yamlObj.fetch_isl_rem(dp_entry)
-
-
-                            if ((dp_fastpath_port is not None) and
-                               (vs_fastpath_port is not None)):
-
-                                fp_label = self.labeller.allocate_label()
-                                self.table.update_fastpath(dpid_to_str(dp_id),
-                                                           ofp_no, fp_label,
-                                                           vs_port_no,
-                                                           dp_fastpath_port,
-                                                           vs_fastpath_port)
-
-                                self.flowprocessor.vs_fastpath_flows(fp_label,
-                                                                     vs_fastpath_port,
-                                                                     vs_port_no)
-
-                                self.flowprocessor.fastpath_flows(dp, fp_label,
-                                                                  ofp_no,
-                                                                  dp_fastpath_port,
-                                                                  vs_port_hw_addr)
-
-                                log.info("FastPath is enabled, allocating label:%s for port %s on dpid:%s to port %s on the virtual switch using link (dpid:%s,port:%s)->(VS,port:%s)",
-                                         fp_label, ofp_no, dpid_to_str(dp_id),
-                                         vs_port_no, dpid_to_str(dp_id),
-                                         dp_fastpath_port, vs_fastpath_port)
-                            else:
-                                log.info("FastPath is not enabled for port %s on (dpid:%s)", ofp_no,
-                                         dpid_to_str(dp_id))
-
-                                self.flowprocessor.create_initial_flow(dp,
-                                                                       vs_port_hw_addr,
-                                                                       ofp_no)
-
-                            if ((dp_isl_port is not None) and
-                                    (rem_isl_port is not None) and
-                                    (rem_isl_dpid is not None)):
-                                isl_label = self.labeller.allocate_label()
-                                self.table.update_isl(dpid_to_str(dp_id),
-                                                      ofp_no, isl_label,
-                                                      rem_isl_dpid,
-                                                      dp_isl_port,
-                                                      rem_isl_port)
-                                self.flowprocessor.isl_flows(dp, isl_label,
-                                                             ofp_no, dp_isl_port)
-
-                                log.info("Inter-switch link is enabled, allocationg label:%s for port %s on dpid:%s for link (dpid:%s, port:%s)->(remote-dp:%s, port:%s)",
-                                         isl_label, ofp_no,
-                                         dpid_to_str(dp_id),
-                                         dpid_to_str(dp_id),
-                                         dp_isl_port,
-                                         rem_isl_dpid,
-                                         rem_isl_port)
-                            else:
-                                log.info("Inter-switch link is not enabled for port:%s on (dpid:%s)",
-                                         ofp_no,
-                                         dpid_to_str(dp_id))
-                else:
-                    log.error("There are no ports to be mapped for (dp_id=%s) in config",
-                              dpid_to_str(dp_id))
-                    self.shutdown(1)
+                self.configure_datapath(dp, dp_id, vs_port_prefix, dp_entry)
+                if self.fastpath_configured is True:
+                    if len(self.isl_switches) != 0:
+                        for isl_switch in self.isl_switches:
+                            dp_entry = isl_switch[0]
+                            dp_id = isl_switch[1]
+                            vs_port_prefix = isl_switch[2]
+                            ofports_in_dp_entry = dp_entry['ports']
+                            switch = self.switches._get_switch(dp_id)
+                            datapath = switch.dp
+                            self.configure_datapath(datapath, dp_id, vs_port_prefix, dp_entry)
+                        self.isl_switches = []
         else:
             if len(self.dp_entries) != 0:
                 for entry in self.dp_entries:
@@ -540,93 +698,20 @@ class RheaController(app_manager.RyuApp):
                     ofports_in_dp_entry = dp_entry['ports']
                     switch = self.switches._get_switch(dp_id)
                     datapath = switch.dp
-                    if len(ofports_in_dp_entry) != 0:
-                        for ofp_no, addresses in ofports_in_dp_entry.items():
-                            ofport = self.switches._get_port(dp_id, ofp_no)
-                            if ofport is not None:
-                                port_name = ofport.name
-                                port_hw_addr = ofport.hw_addr
-                                vs_port_name, vs_port_no = self.VSManager.AddPort(vs_port_prefix,
-                                                                                  ofp_no)
-                                time.sleep(.10)
-                                self.VSManager.SetIPAddress(vs_port_name,
-                                                            addresses)
-                                vs_interface = self.netlink.find_interface_by_name(vs_port_name)
-                                if vs_interface:
-                                    vs_port_hw_addr = vs_interface['mac-address']
-                                    vs_ifindex = vs_interface['ifindex']
-                                    self.vsif_to_ofp[vs_ifindex] = vs_port_no
-                                else:
-                                    log.error("Virtual switch interface not found, Mapping not completed, %s not found in interface table",
-                                              vs_port_name)
-                                    self.shutdown(1)
-                            log.info("Virtual switch port %s with OpenFlow port number %s has a mac address of %s", vs_port_name, vs_port_no,
-                                     vs_port_hw_addr)
-                            self.table.update_dp_port(dpid_to_str(dp_id),
-                                                      ofp_no, port_name,
-                                                      port_hw_addr,
-                                                      vs_port_name,
-                                                      vs_port_no,
-                                                      vs_port_hw_addr)
-                            log.info("OpenFlow port %d on dp_id=%s added to dp0",
-                                     ofp_no, dpid_to_str(dp_id))
+                    self.configure_datapath(datapath, dp_id, vs_port_prefix, dp_entry)
+                self.dp_entries = []
 
-                            dp_fastpath_port = self.yamlObj.fetch_fpport(dp_entry)
-                            vs_fastpath_port = self.yamlObj.fetch_vsfpport(dp_entry)
-                            dp_isl_port = self.yamlObj.fetch_isl_port(dp_entry,
-                                                                      dpid_to_str(dp_id))
-                            rem_isl_port, rem_isl_dpid = self.yamlObj.fetch_isl_rem(dp_entry)
-                            if ((dp_fastpath_port is not None) and
-                                    (vs_fastpath_port is not None)):
-                                fp_label = self.labeller.allocate_label()
-                                self.table.update_fastpath(dpid_to_str(dp_id),
-                                                           ofp_no, fp_label,
-                                                           vs_port_no,
-                                                           dp_fastpath_port,
-                                                           vs_fastpath_port)
-                                self.flowprocessor.vs_fastpath_flows(fp_label,
-                                                                     vs_fastpath_port,
-                                                                     vs_port_no)
-                                self.flowprocessor.fastpath_flows(datapath,
-                                                                  fp_label,
-                                                                  ofp_no,
-                                                                  dp_fastpath_port,
-                                                                  vs_port_hw_addr)
-                                log.info("FastPath is enabled, allocating label:%s for port %s on dpid:%s to port %s on the virtual switch using link (dpid:%s,port:%s)->(VS,port:%s)",
-                                         fp_label, ofp_no, dpid_to_str(dp_id),
-                                         vs_port_no, dpid_to_str(dp_id),
-                                         dp_fastpath_port, vs_fastpath_port)
-                            else:
-                                log.info("Fastpath is not enabled for port %s on (dpid:%s)",
-                                         ofp_no, dpid_to_str(dp_id))
-                                self.flowprocessor.create_initial_flow(datapath,
-                                                                       vs_port_hw_addr,
-                                                                       ofp_no)
-                            if ((dp_isl_port is not None) and
-                                    (rem_isl_port is not None) and
-                                    (rem_isl_dpid is not None)):
-                                isl_label = self.labeller.allocate_label()
-                                self.table.update_isl(dpid_to_str(dp_id),
-                                                      ofp_no, isl_label,
-                                                      rem_isl_dpid,
-                                                      dp_isl_port,
-                                                      rem_isl_port)
-                                self.flowprocessor.isl_flows(datapath, isl_label,
-                                                             ofp_no, dp_isl_port)
-                                log.info("Inter-switch link is enabled, allocationg label:%s for port %s on dpid:%s for link (dpid:%s, port:%s)->(remote-dp:%s, port:%s)",
-                                         isl_label, ofp_no,
-                                         dpid_to_str(dp_id),
-                                         dpid_to_str(dp_id),
-                                         dp_isl_port,
-                                         rem_isl_dpid,
-                                         rem_isl_port)
-                            else:
-                                log.info("Inter-switch link is not enabled for port:%s on (dpid:%s)",
-                                         ofp_no, dpid_to_str(dp_id))
-                    else:
-                        log.error("There are no ports to be mapped for (dp_id=%s) in config",
-                                  dpid_to_str(dp_id))
-                        self.shutdown(1)
+            if self.fastpath_configured is True:
+                if len(self.isl_switches) != 0:
+                    for isl_switch in self.isl_switches:
+                        dp_entry = isl_switch[0]
+                        dp_id = isl_switch[1]
+                        vs_port_prefix = isl_switch[2]
+                        ofports_in_dp_entry = dp_entry['ports']
+                        switch = self.switches._get_switch(dp_id)
+                        datapath = switch.dp
+                        self.configure_datapath(datapath, dp_id, vs_port_prefix, dp_entry)
+                    self.isl_switches = []
 
             vs_fastpath_int, vs_fastpath_port = self.yamlObj.vs_fp_entry()
             if ((vs_fastpath_int is None) and (vs_fastpath_port is None) and
@@ -853,10 +938,7 @@ class RheaController(app_manager.RyuApp):
                              dpid_to_str(dpid))
                     dp_fastpath_port = self.yamlObj.fetch_fpport(dp_entry)
                     vs_fastpath_port = self.yamlObj.fetch_vsfpport(dp_entry)
-                    dp_isl_port = self.yamlObj.fetch_isl_port(dp_entry,
-                                                              dpid_to_str(dpid))
-                    rem_isl_port, rem_isl_dpid = self.yamlObj.fetch_isl_rem(dp_entry)
-                    rem_ports = self.yamlObj.fetch_rem_ports(dp_entry)
+                    interswitch_links = self.yamlObj.fetch_interswitch_links(dp_entry)
                     if ((dp_fastpath_port is not None) and
                             (vs_fastpath_port is not None)):
                         fp_label = self.labeller.allocate_label()
@@ -878,28 +960,47 @@ class RheaController(app_manager.RyuApp):
                     else:
                         log.info("FastPath is not enabled for port %s on (dpid:%s)",
                                  port_no, dpid_to_str(dpid))
-                        self.flowprocessor.create_initial_flow(dp,
-                                                               vs_port_hw_addr,
-                                                               port_no)
 
-                    if ((dp_isl_port is not None) and
-                            (rem_isl_port is not None) and
-                            (rem_isl_dpid is not None) and
-                            (rem_ports is not None)):
-                        for rem_port in rem_ports:
-                            isl_label = self.labeller.allocate_label()
-                            self.table.update_isl(dpid_to_str(dpid), port_no,
-                                                  isl_label, rem_port,
-                                                  rem_isl_dpid, dp_isl_port,
-                                                  rem_isl_port)
-                            log.info("Inter-switch link is enabled, allocating label:%s for port %s on dpid:%s to port %s on remote dp(id:%s) using link (dpid:%s,port:%s)->(remote-dp:%s, port:%s)",
-                                     isl_label,
-                                     port_no, dpid_to_str(dpid), rem_port,
-                                     rem_isl_dpid, dpid_to_str(dpid),
-                                     dp_isl_port, rem_isl_dpid, rem_isl_port)
+                    if (interswitch_links is not None):
+                        isl_label = self.labeller.allocate_label()
+                        self.table.update_isl(dpid_to_str(dpid), port_no,
+                                              isl_label, interswitch_links)
+                        self.flowprocessor.ingress_isl_flows(dp, isl_label, port_no,
+                                                             interswitch_links)
+                        if self.table.fastpath_switch:
+                            fastpath_dpid = self.table.fastpath_switch.keys()[0]
+                            dp_fs_port, vs_fs_port = self.table.fastpath_switch[fastpath_dpid]
+                            if fastpath_dpid is not dpid_to_str(dpid):
+                                for isl_port, remote_dp in interswitch_links.items():
+                                    remote_dpid = remote_dp.keys()[0]
+                                    remote_dpid_port = remote_dp[remote_dpid]
+                                    if remote_dpid == fastpath_dpid:
+                                        self.flowprocessor.vs_fastpath_flows(isl_label,
+                                                                             vs_fs_port,
+                                                                             vs_port_no)
+                                        fastpath_switch = self.switches._get_switch(str_to_dpid(fastpath_dpid))
+                                        fastpath_dp = fastpath_switch.dp
+                                        self.flowprocessor.egress_isl_flows(fastpath_dp,
+                                                                            isl_label,
+                                                                            remote_dpid_port,
+                                                                            dp_fs_port)
+                                        self.flowprocessor.fastpath_flows(dp, isl_label,
+                                                                          port_no,
+                                                                          isl_port,
+                                                                          vs_port_hw_addr)
+
+                        log.info("Inter-switch link is enabled, allocating label:%s for port %s on dpid:%s)",
+                                 isl_label, port_no, dpid_to_str(dpid))
                     else:
                         log.info("Inter-switch link is not enabled for port:%s on (dpid:%s)",
                                  port_no, dpid_to_str(dpid))
+
+                    if ((dp_fastpath_port is None) and
+                            (vs_fastpath_port is None) and
+                            (interswitch_links is None)):
+                        self.flowprocessor.create_initial_flow(dp,
+                                                               vs_port_hw_addr,
+                                                               port_no)
 
     @set_ev_cls(event.EventSwitchLeave, MAIN_DISPATCHER)
     def handler_datapath_leave(self, ev):
