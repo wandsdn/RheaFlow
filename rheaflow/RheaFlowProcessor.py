@@ -1652,8 +1652,80 @@ class RheaFlowProcessor(object):
                 return host
         return None
 
+    def find_by_index(self, interfaces, ifindex):
+        for interface in interfaces:
+            if ifindex == interface['ifindex']:
+                return interface
+        return None
+
     def handle_packet_in(self, msg, maptable, interfacetable, vsif_to_ofp,
                          HostTable):
+        '''
+            Output packet-in messages received from datapaths
+            connected to the controller.
+        '''
+        _msg = msg
+        dp = _msg.datapath
+        dp_id = dp.id
+        ofp = dp.ofproto
+        ofp_parser = dp.ofproto_parser
+        _table = maptable
+        _vsif_ofp_map = vsif_to_ofp
+        _ifTable = interfacetable
+
+        if is_rfvs(dp_id):
+            in_port = _msg.match['in_port']
+
+            if in_port == ofp.OFPP_LOCAL:
+                log.warn("%s received from dp0's OpenFlow LOCAL port", _msg.data)
+                log.warn("The received packet will be discarded")
+                return
+            for iface_index, vs_ofp_no in _vsif_ofp_map.items():
+                if vs_ofp_no == in_port:
+                    iface = self.find_by_index(_ifTable, iface_index)
+                    if iface:
+                        vs_name = iface['ifname']
+                        vs_mac = iface['mac-address']
+                        vs_dp_map = _table.vs_port_to_dp_port(vs_name,
+                                                              vs_ofp_no,
+                                                              vs_mac)
+                        if vs_dp_map:
+                            datapath_id, dp_port, dp_port_name, dp_port_hw_addr = vs_dp_map
+                            switch = self._switches._get_switch(str_to_dpid(datapath_id))
+                            datapath = switch.dp
+                            if switch is not None:
+                                self.send_pkt_out(datapath, dp_port, _msg.data)
+                                return
+                            else:
+                                log.warn("datapath %s not found!!! Dropping packet", datapath_id)
+                                return
+        else:
+            in_port = _msg.match['in_port']
+            if not in_port:
+                log.warn("This has no in-port. Drop!!!")
+                return
+            else:
+                port = self._switches._get_port(dp_id, in_port)
+                dp_port_hw_addr = port.hw_addr
+                dp_port_name = port.name
+                dp_vs_map = _table.dp_port_to_vs_port(dpid_to_str(dp_id),
+                                                      in_port,
+                                                      dp_port_name,
+                                                      dp_port_hw_addr)
+                if dp_vs_map is None:
+                    log.warn("Packet-in received from unmapped port:%s on dp_id:%s",
+                             in_port, dpid_to_str(dp_id))
+                    log.warn("Check rheaflow configuration")
+                    return
+                else:
+                    vs_port_name, vs_port, vs_port_hw_addr = dp_vs_map
+                    vswitch = self._switches._get_switch(str_to_dpid(vs_id))
+                    vs_dp = vswitch.dp
+                    self.send_pkt_out(vs_dp, vs_port, _msg.data)
+                    return
+
+    def debug_handle_packet_in(self, msg, maptable, interfacetable, vsif_to_ofp,
+                               HostTable):
         '''
             Process and parse packet-in messages received from
             datapaths connected to the controller.
