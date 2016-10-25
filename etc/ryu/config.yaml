@@ -8,11 +8,11 @@ datapaths:
               2: ['172.16.2.1/24', '2001:0db8:0:f102::1/64'], 
               4: ['172.16.4.1/24', '2001:0db8:0:f104::1/64'],
               5: ['172.16.5.1/24', '2001:0db8:0:f105::1/64'] }
+     decrement_ttl: FALSE
      fastpath_port: 3
      fastpath_vs: 1002
      interswitch_links: { 6: {0000000000000089: 6}, 
                           7: {0000000000000088: 7}}
-
 
    - name: uow-switch1
      type: Brocade
@@ -22,24 +22,24 @@ datapaths:
              2: [],
              4: [],
              5: [] }
+     decrement_ttl: TRUE
      interswitch_links: { 6: {0000000000000099: 6},
                           8: {0000000000000088: 8}}
     
-
    - name: wand-ruakura-switch2
      type: Pica
      dp_id: 0000000000000088
      vs_port_prefix: wrs1-p
      ports: {1: [],2: [],3: [],4: [],5: [],6: [],9: [] }
+     decrement_ttl: FALSE
      interswitch_links: { 7: {0000000000000099: 7},
                           8: {0000000000000089: 8}}
-     
 
 # Settings/Configuration for
 # the virtual switch dp0
 # change fastpath interface to eth2
 # on prod
 Virtual-switch: {
-  fastpath_interface: vs-fastpath,
+  fastpath_interface: eth2,
   fastpath_port: 1002
 }
