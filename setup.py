@@ -32,7 +32,7 @@ setup(
     long_description=readme,
     author='Oladimeji Fayomi',
     author_email='olafayomi@gmail.com',
-    url='https://github.com/wandsdn/rheaflow',
+    url='https://github.com/wandsdn/RheaFlow',
     license=license,
     packages=find_packages(exclude=['docs', 'tests']),
     install_requires=(
@@ -50,10 +50,12 @@ setup(
     classifiers=[
        'License :: OSI Approved :: Apache License, Version 2.0',
        'Programming Language :: Python',
+       'Programming Language :: Python :: 2.7',
        'Operating System :: POSIX',
-       'Topic :: Software Defined Networking',
-       'Topic :: Network Programming',
+       'Topic :: System :: Networking',
        'Intended Audience :: Developers',
-       'Development Status :: 4 - Beta'
+       'Intended Audience :: Information Technology',
+       'Intended Audience :: System administrators',
+       'Development Status :: 4 - Beta',
+       'Environment :: Console'
     ])
-
