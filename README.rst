@@ -40,7 +40,6 @@ RheaFlow is configured with a YAML-based configuration file which is located by 
 
 The configuration file consists of two block collections. The ``datapaths`` collection is used to provide information about the OpenFlow switches that will be controlled by RheaFlow. A node in the ``datapaths`` collection represents an OpenFlow switch, the entries in each node are:
 
-
   * name: human-readable name assigned to the OpenFlow switch e.g ``switch-at-x930``.
   * type: identifies the vendor of the OpenFlow switch e.g ``Allied Telesis``.
   * dp_id: Unique datapath ID of the OpenFlow switch.
