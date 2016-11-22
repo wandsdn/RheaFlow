@@ -29,9 +29,9 @@ You have to run this as ``root`` or use ``sudo``
 
 Uninstall
 ---------
-To uninstall RheaFlow
+To uninstall RheaFlow.
 ::
-``# pip uninstall RheaFlow``
+  # pip uninstall RheaFlow
 
 =============
 Configuration
