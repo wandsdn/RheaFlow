@@ -43,12 +43,20 @@ The configuration file consists of two block collections. The ``datapaths`` coll
   * name: human-readable name assigned to the OpenFlow switch e.g ``switch-at-x930``.
   * type: identifies the vendor of the OpenFlow switch e.g ``Allied Telesis``.
   * dp_id: Unique datapath ID of the OpenFlow switch.
-  * vs_port_prefix: provides the interface name format for the virtual interface siblings of the ports of the OpenFlow switch that will be used for routing by the Linux host machine.
-  * ports: specifies the OpenFlow port number of the interfaces on the OpenFlow switch that will be used for routing and the IP addresses that should be assigned to their virtual siblings on the Linux host machine.
-  * decrement_ttl: Used to specify that TTL decrement actions should be included in the OpenFlow rules installed on the switch.
-  * fastpath_port: specifies the OpenFlow port number of the interface that will used for FastPath on the switch.
-  * fastpath_vs: specifies the OpenFlow port number of the FastPath interface on the Linux host machine.
-  * interswitch_links: specifies the local OpenFlow port number, remote datapath ID and port number for inter-switch links on the switch.
+  * vs_port_prefix: provides the interface name format for the virtual
+    interface siblings of the ports of the OpenFlow switch that will be used
+    for routing by the Linux host machine.
+  * ports: specifies the OpenFlow port number of the interfaces on the
+    OpenFlow switch that will be used for routing and the IP addresses
+    that should be assigned to their virtual siblings on the Linux host machine.
+  * decrement_ttl: Used to specify that TTL decrement actions should be
+    included in the OpenFlow rules installed on the switch.
+  * fastpath_port: specifies the OpenFlow port number of the interface that
+                   will used for FastPath on the switch.
+  * fastpath_vs: specifies the OpenFlow port number of the FastPath
+                 interface on the Linux host machine.
+  * interswitch_links: specifies the local OpenFlow port number,
+                       remote datapath ID and port number for inter-switch links on the switch.
 
 The ``Virtual-switch`` collection is used to configure the virtual switch on the Linux host machine. ``fastpath_interface`` specifies the interface on the Linux host machine that will be used for the FastPath link to an OpenFlow switch. ``fastpath_port`` specifies OpenFlow port number that should be assigned to ``fastpath_interface``, ``fastpath_port`` should be the same as ``fastpath_vs`` provided the OpenFlow switch in the ``datapaths`` collection.
 
