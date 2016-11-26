@@ -73,6 +73,7 @@ Usage
 =====
 
 The Linux machine hosting RheaFlow requires Open vSwitch and BIRD Internet Routing Daemon installation. Open vSwitch allows RheaFlow to create and configure a virtual switch instance on the Linux machine that multiplexes the interfaces of the OpenFlow switches controlled by RheaFlow. BIRD provides the routing information needed to compute the Forwarding Information Base (FIB) which RheaFlow converts to OpenFlow rules that allow routing on the OpenFlow switches. The BIRD Routing Daemon is a fork that has been modified to send route information to RheaFlow in JSON format over a TCP socket. The image below shows the deployment of RheaFlow on a Linux machine.
+
 .. image:: docs/images/RheaFlow.png
 
 Open vSwitch Installation
