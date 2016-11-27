@@ -125,7 +125,7 @@ The BIRD routing daemon should be started after RheaFlow has been started otherw
 OpenFlow switch support
 =======================
 
-RheaFlow has been tested and would work with the following OpenFlow switches.
+RheaFlow has been tested and would work with the following OpenFlow switches for OpenFlow v1.3.
 
 Allied Telesis
 --------------
