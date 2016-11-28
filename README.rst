@@ -154,6 +154,5 @@ Please see the file called LICENSE.
 Support
 =======
 
-If you have any technical questions, problems or suggestions regarding RheaFlow please send them to `RheaFlow-dev@wand.net.nz <mailto:RheaFlow-dev@wand.net.nz>`.
-
-To create an issue, use `Github issues <https://github.com/wandsdn/RheaFlow/issues>`.
+If you have any technical questions, problems or suggestions regarding RheaFlow
+please create an issue on github, using `Github issues <https://github.com/wandsdn/RheaFlow/issues>`.
