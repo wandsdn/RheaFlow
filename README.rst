@@ -1,4 +1,4 @@
-:version: 0.0.1
+:version: 0.0.2
 :copyright: 2016 `WAND <http://wand.net.nz/>`_.  All Rights Reserved.
 
 .. meta::

@@ -27,13 +27,14 @@ with open('LICENSE') as f:
 
 setup(
     name='RheaFlow',
-    version='0.0.1',
+    version='0.0.2',
     description='Software defined network router',
     long_description=readme,
     author='Oladimeji Fayomi',
     author_email='olafayomi@gmail.com',
     url='https://github.com/wandsdn/RheaFlow',
     license=license,
+    include_package_data=True,
     packages=find_packages(exclude=['docs', 'tests']),
     install_requires=(
        'eventlet',
