@@ -26,7 +26,7 @@ with open('LICENSE') as f:
 
 
 setup(
-    name='rheaflow',
+    name='RheaFlow',
     version='0.0.1',
     description='Software defined network router',
     long_description=readme,
@@ -44,9 +44,9 @@ setup(
     ),
     data_files=[('etc/ryu/', ['etc/ryu/config.yaml']),
                 ('etc/ryu/', ['etc/ryu/ryu.conf']),
-                ('bin/', ['rheaflow/RheaManager']),
-                ('/etc/systemd/system/', ['etc/systemd/rheaflow.service']),
-                ('/etc/systemd/system/', ['etc/systemd/netlinkprocessor.service'])],
+                ('bin/', ['RheaFlow/RheaManager']),
+                ('/etc/systemd/system/', ['etc/systemd/RheaFlow.service']),
+                ('/etc/systemd/system/', ['etc/systemd/NetlinkProcessor.service'])],
     classifiers=[
        'License :: OSI Approved :: Apache License, Version 2.0',
        'Programming Language :: Python',

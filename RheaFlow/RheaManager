@@ -31,8 +31,8 @@ import argparse
 import logging
 
 
-os.environ['RHEA_DIR'] = '/usr/local/lib/python2.7/dist-packages/rheaflow'
-RHEA_RUN_FILE = '/var/run/rheaflow'
+os.environ['RHEA_DIR'] = '/usr/local/lib/python2.7/dist-packages/RheaFlow'
+RHEA_RUN_FILE = '/var/run/RheaFlow'
 
 parser = argparse.ArgumentParser(
          description='Launches and stops RheaFlow applications')

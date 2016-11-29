@@ -1,0 +1,12 @@
+[Unit]
+Description=RheaFlow start up script
+After=NetlinkProcessor.service
+BindsTo=NetlinkProcessor.service
+[Service]
+Type=idle
+WorkingDirectory=/usr/local/lib/python2.7/dist-packages/RheaFlow/
+PIDFile=/var/run/RheaFlow/pid/RheaFlow.pid
+ExecStart=/usr/local/bin/ryu-manager RheaController.py --log-file /var/log/RheaFlow
+
+[Install]
+WantedBy=multi-user.target

@@ -1,10 +1,10 @@
 [Unit]
 Description=Start netlinkprocessor for RheaFlow
-
+PartOf=RheaFlow.service
 [Service]
 Type=idle
-WorkingDirectory=/usr/local/lib/python2.7/dist-packages/rheaflow/
-PIDFile=/var/run/rheaflow/pid/netlinkprocessor.pid
+WorkingDirectory=/usr/local/lib/python2.7/dist-packages/RheaFlow/
+PIDFile=/var/run/RheaFlow/pid/NetlinkProcessor.pid
 ExecStart=/usr/bin/python NetlinkProcessor.py
 
 [Install]

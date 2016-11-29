@@ -24,7 +24,7 @@
 
 import logging
 import logging.handlers
-RHEAFLOWLOG = '/var/log/rheaflow'
+RHEAFLOWLOG = '/var/log/RheaFlow'
 log = logging.getLogger('RheaFlow')
 log.setLevel(logging.INFO)
 StdOutHandler = logging.StreamHandler()
