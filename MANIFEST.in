@@ -1,0 +1,7 @@
+include *.rst
+
+include *.txt
+
+recursive-include etc *.conf *.service *.yaml
+
+graft docs
