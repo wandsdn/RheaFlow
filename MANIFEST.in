@@ -2,6 +2,9 @@ include *.rst
 
 include *.txt
 
+include LICENSE
+
+include RheaFlow/RheaManager
 recursive-include etc *.conf *.service *.yaml
 
 graft docs
